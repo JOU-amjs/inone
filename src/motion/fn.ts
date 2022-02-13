@@ -4,8 +4,10 @@ import {
   TDirection
 } from '../../typings';
 import myAssert from '../myAssert';
-import { createRandomCode, getElementOffsets } from '../helper';
+import { createRandomCode, getElementOffsets } from '../utils/helper';
 import BaseMotion from './BaseMotion';
+import CssModelMapper from '../utils/CssModelMapper';
+import KeyframesModelMapper from '../utils/KeyframesModelMapper';
 
 
 export const visibilityClsName = `__one_visibility_${createRandomCode()}`;
@@ -55,21 +57,17 @@ export function validateBeforeRun([beginOne, endOne]: any[]) {
 
 // 构造transform样式
 export const buildStyleTransform = (tx: number, ty: number, sx: number, sy: number) => 
-  `transform: translate(${tx}px, ${ty}px) scale(${sx}, ${sy});`;
+  `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
 
-
-const buildKeyFrameWithPrefix = (name: string, body: string) => `@keyframes ${name} ${body}
-  @-webkit-keyframes ${name} ${body}`;
 // animation-fill-mode: both;是在淡入淡出时，为了执行前保持from内样式，完成后保持to内样式
-const buildAnimClassCss = (clsName: string, animationVal: string, zIndex: number) => `.${clsName} {
-  animation: ${animationVal};
-  -webikt-animation: ${animationVal};
-  -o-animation: ${animationVal};
-  animation-fill-mode: both;
-  transform-origin: left top;
-  position: relative;
-  z-index: ${zIndex} !important;
-}`;
+const buildAnimClassCss = (clsName: string, animationVal: string, zIndex: number) => 
+  new CssModelMapper('.' + clsName)
+    .add('animation', animationVal, true)
+    .add('animation-fill-mode', 'both')
+    .add('transform-origin', 'left top')
+    .add('position', 'relative')
+    .add('z-index', zIndex, false, true)
+    .toString();
 
 /**
  * 运行过渡动画
@@ -117,55 +115,67 @@ export function runAnimation(
   const randomCode = createRandomCode();
   const animationBeginName = '__one_begin_anim_' + randomCode;
   const animationEndName = '__one_end_anim_' + randomCode;
-  const animationBeginFadeName = '__one_begin_anim_fade_' + randomCode;
-  const animationEndFadeName = '__one_end_anim_fade_' + randomCode
-  const animationBeginBody = `{
-    from {${buildStyleTransform(0, 0, 1, 1)}}
-    to {${buildStyleTransform(
-      diffOffsetLeft + offsetLeft, 
+  const animationBeginTransitionName = '__one_begin_anim_transition_' + randomCode;
+  const animationEndTransitionName = '__one_end_anim_transition_' + randomCode;
+  const animationBeginMapper = new KeyframesModelMapper(animationBeginName)
+    .addFrom('transform', buildStyleTransform(0, 0, 1, 1))
+    .addTo('transform', buildStyleTransform(
+      diffOffsetLeft + offsetLeft,
       diffOffsetTop + offsetTop, 
       timesScaleEnd2BeginX, 
       timesScaleEnd2BeginY
-    )}}
-  }`;
-  const animationEndBody = `{
-    from {${buildStyleTransform(
+    ));
+  const animationEndMapper = new KeyframesModelMapper(animationEndName)
+    .addFrom('transform', buildStyleTransform(
       -diffOffsetLeft, 
       -diffOffsetTop, 
       timesScaleBegin2EndX, 
       timesScaleBegin2EndY
-    )}}
-    to {${buildStyleTransform(offsetLeft, offsetTop, 1, 1)}}
-  }`
-  const animationBeginFadeBody = `{
-    from { opacity: 1; }
-    to { opacity: 0; }
-  }`;
-  const animationEndFadeBody = `{
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }`;
+    ))
+    .addTo('transform', buildStyleTransform(offsetLeft, offsetTop, 1, 1));
+  const animationBeginTransitionMapper = new KeyframesModelMapper(animationBeginTransitionName)
+    .addFrom('opacity', 1)
+    .addTo('opacity', 0);
+  const animationEndTransitionMapper = new KeyframesModelMapper(animationEndTransitionName)
+    .addFrom('opacity', 0)
+    .addTo('opacity', 1);
 
-  timing = timing || 'ease';
-  const durationSeconds = duration / 1000;
-  let beginElementAnimVal = `${animationBeginName} ${durationSeconds}s ${timing}`;
-  let endElementAnimVal = `${animationEndName} ${durationSeconds}s ${timing}`;
+  let beginElementAnimVal = [KeyframesModelMapper.buildAnimationValue(
+    animationBeginName,
+    duration,
+    timing
+  )];
+  let endElementAnimVal = [KeyframesModelMapper.buildAnimationValue(
+    animationEndName,
+    duration,
+    timing
+  )];
   // 如果有渐变动画，则需要先移除endElement的visibility class才能起作用
   if (gradientDetail) {
     endElement.classList.remove(visibilityClsName);
-    const fadeDurationSeconds = gradientDetail.duration / 1000;
-    const delayMillisecond = gradientDetail.delay / 1000;
-    beginElementAnimVal += `, ${animationBeginFadeName} ${fadeDurationSeconds}s ease ${delayMillisecond}s`;
-    endElementAnimVal += `, ${animationEndFadeName} ${fadeDurationSeconds}s ease ${delayMillisecond}s`;
+    const gradientDuration = gradientDetail.duration;
+    const gradientDelay = gradientDetail.delay;
+    beginElementAnimVal.push(KeyframesModelMapper.buildAnimationValue(
+      animationBeginTransitionName,
+      gradientDuration,
+      'ease',
+      gradientDelay
+    ));
+    endElementAnimVal.push(KeyframesModelMapper.buildAnimationValue(
+      animationEndTransitionName,
+      gradientDuration,
+      'ease',
+      gradientDelay
+    ));
   }
   const beginAnimCls = '__one_anim_begin_' + randomCode;
   const endAnimCls = '__one_anim_end_' + randomCode;
-  styleNode.innerHTML = `${buildAnimClassCss(beginAnimCls, beginElementAnimVal, zIndex + 1)}
-  ${buildAnimClassCss(endAnimCls, endElementAnimVal, zIndex)}
-  ${buildKeyFrameWithPrefix(animationBeginName, animationBeginBody)}
-  ${buildKeyFrameWithPrefix(animationEndName, animationEndBody)}
-  ${buildKeyFrameWithPrefix(animationBeginFadeName, animationBeginFadeBody)}
-  ${buildKeyFrameWithPrefix(animationEndFadeName, animationEndFadeBody)}`;
+  styleNode.innerHTML = `${buildAnimClassCss(beginAnimCls, beginElementAnimVal.join(','), zIndex + 1)}
+  ${buildAnimClassCss(endAnimCls, endElementAnimVal.join(','), zIndex)}
+  ${animationBeginMapper.toString()}
+  ${animationEndMapper.toString()}
+  ${animationBeginTransitionMapper.toString()}
+  ${animationEndTransitionMapper.toString()}`;
   document.head.appendChild(styleNode);
 
   // 开始执行运动
@@ -184,7 +194,7 @@ export function runAnimation(
     endOne.after && endOne.after(endElement, direction);
 
     // 执行完成后移除动画css
-    // styleNode.parentNode?.removeChild(styleNode);
+    styleNode.parentNode?.removeChild(styleNode);
     onEnd && onEnd();
   }, duration);
 }

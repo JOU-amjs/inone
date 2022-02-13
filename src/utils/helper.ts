@@ -1,5 +1,4 @@
 
-
 /**
  * 获取元素离body的left、top偏移量
  * @param el 目标元素
@@ -30,4 +29,24 @@ export function createRandomCode() {
     codes.push(chars[randomNum]);
   }
   return codes.join('');
+}
+
+export type TStyleBody = Record<string, string|number>;
+/**
+ * 添加一条样式行
+ * @param key 样式key
+ * @param val 样式内容
+ * @param withPrefix 是否生成多条带不同后缀的样式行
+ * @param isImportant 是否添加!important后缀
+ * @returns 当前对象
+ */
+export function addStyleRow(ctx: TStyleBody, key: string, val: string|number, withPrefix?: boolean, isImportant?: boolean) {
+  const prefixs = ['-webkit-', '-moz-', '-o-'];
+  const importantSuffix = isImportant ? ' !important' : '';
+  ctx[key] = val + importantSuffix;
+  if (withPrefix) {
+    prefixs.forEach(prefix => {
+      ctx[prefix + key] = val + importantSuffix;
+    });
+  }
 }

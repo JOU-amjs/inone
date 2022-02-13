@@ -5,7 +5,7 @@ import {
   TProgressMotionTransition
 } from '../../typings';
 import myAssert from '../myAssert';
-import { createRandomCode, getElementOffsets } from '../helper';
+import { createRandomCode, getElementOffsets } from '../utils/helper';
 import One from '../One';
 import BaseMotion from './BaseMotion';
 import {
@@ -14,6 +14,7 @@ import {
   validateBeforeRun,
   visibilityClsName,
 } from './fn';
+import CssModelMapper from '../utils/CssModelMapper';
 
 let animationStyleNode: HTMLStyleElement|undefined = undefined;
 export default class ProgressMotion extends BaseMotion {
@@ -142,13 +143,26 @@ export default class ProgressMotion extends BaseMotion {
           }
         }
       }
-      const buildProgressClassCss = (clsName: string, tx: number, ty: number, sx: number, sy: number, zIndex: number, opacity?: number) => `.${clsName} {
-          ${buildStyleTransform(tx, ty, sx, sy)}
-          transform-origin: left top;
-          position: relative;
-          z-index: ${zIndex} !important;${typeof opacity === 'number' ? `
-          opacity: ${opacity} !important;` : ''}
-        }`;
+      const buildProgressClassCss = (
+        clsName: string, 
+        tx: number, 
+        ty: number, 
+        sx: number, 
+        sy: number, 
+        zIndex: number, 
+        opacity?: number
+      ) => {
+        const cssMapper = new CssModelMapper(`.${clsName}`)
+          .add('transform', buildStyleTransform(tx, ty, sx, sy))
+          .add('transform-origin', 'left top')
+          .add('position', 'relative')
+          .add('z-index', zIndex, false, true);
+        if (typeof opacity === 'number') {
+          cssMapper.add('opacity', opacity, false, true);
+        }
+        return cssMapper.toString();
+      };
+
       animationStyleNode.innerHTML = `${buildProgressClassCss(
         this.__beginProgressCls,
         (diffOffsetLeft + this.__offsetLeft) * percentProgress,
