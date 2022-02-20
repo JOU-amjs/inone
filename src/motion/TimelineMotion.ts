@@ -3,6 +3,7 @@ import {
   ITimelineMotionConnectOptions, 
   TDirection
 } from '../../typings';
+import myAssert from '../myAssert';
 import One from '../One';
 import BaseMotion from './BaseMotion';
 import {
@@ -17,9 +18,11 @@ export default class TimelineMotion extends BaseMotion {
   static id(id: string) {
     return TimelineMotion.motions[id];
   }
-  static connect(begin: One, end: One, options?: ITimelineMotionConnectOptions) {
+  static connect(ones: One[]|One[][], options?: ITimelineMotionConnectOptions) {
+    myAssert(Array.isArray(ones), 'must specify a array which contains `One` objects');
+    const newOnes = (Array.isArray(ones[0]) ? ones : ([ones] as One[][])) as One[][];
     const motionIns = new TimelineMotion(options);
-    initMotion(begin, end, motionIns, TimelineMotion.motions, options?.id);
+    initMotion(newOnes, motionIns, TimelineMotion.motions, options?.id);
     return motionIns;
   }
 
@@ -41,6 +44,7 @@ export default class TimelineMotion extends BaseMotion {
     }
     this.__timing = options?.timing || undefined;
 
+    const isEmpty = (arg: any) => arg === undefined || arg === null;
     // 初始化运动渐变参数
     const initTransition = (transition: any, direction: TDirection) => {
       const fadeVar = `__${direction}Transition` as '__forwardTransition'|'__backwardTransition';
@@ -50,21 +54,24 @@ export default class TimelineMotion extends BaseMotion {
           delay: 0,
         };
       } else if (typeof transition === 'object') {
-        if (transition.duration > 0) {
+        const forward = transition.forward;
+        const backward = transition.backward;
+        if (typeof transition.duration === 'number') {
           this[fadeVar] = {
             duration: transition.duration,
             delay: transition.delay || 0,
           };
-        } else if (direction === 'forward' && transition.forward) {
-          initTransition(transition.forward, direction);
-        } else if (direction === 'backward' && transition.backward) {
-          initTransition(transition.backward, direction);
+        } else if (direction === 'forward' && !isEmpty(forward)) {
+          initTransition(forward, direction);
+        } else if (direction === 'backward' && !isEmpty(backward)) {
+          initTransition(backward, direction);
         }
       }
     };
-    if (options?.transition) {
-      initTransition(options?.transition, 'forward');
-      initTransition(options?.transition, 'backward');
+    const transition = options?.transition;
+    if (!isEmpty(transition)) {
+      initTransition(transition, 'forward');
+      initTransition(transition, 'backward');
     }
   }
 
@@ -72,52 +79,59 @@ export default class TimelineMotion extends BaseMotion {
    * 执行前进动画，即beginElement到endElement
    */
   forward(onEnd?: () => void) {
-    validateBeforeRun(this.ones);
+    validateBeforeRun(this);
     if (this.__running) return;
-    const [beginOne, endOne] = this.ones;
     this.__running = true;
-    runAnimation(
-      'forward', 
-      beginOne, 
-      endOne, 
-      this.beginEl || beginOne.el(),
-      this.endEl || endOne.el(),
-      this.__forwardDuration, 
-      this.__zIndex, 
-      this.__timing, 
-      this.__offsetTop,
-      this.__offsetLeft,
-      this.__forwardTransition,
-      () => {
-        this.__running = false;
-        onEnd && onEnd();
-      }
-    );
+    this.ones.forEach(([beginOne, endOne], i) => {
+      const beginEl = this.els[i].begin = this.els[i].begin || beginOne.el();
+      const endEl = this.els[i].end = this.els[i].end || endOne.el();
+      runAnimation(
+        'forward',
+        beginOne,
+        endOne,
+        beginEl,
+        endEl,
+        this.__forwardDuration, 
+        this.__zIndex, 
+        this.__timing, 
+        this.__offsetTop,
+        this.__offsetLeft,
+        this.__forwardTransition,
+        () => {
+          this.__running = false;
+          onEnd && onEnd();
+        }
+      );
+    });
   }
+
   /**
    * 执行后退动画，即endElement到beginElement
    */
   backward(onEnd?: () => void) {
-    validateBeforeRun(this.ones);
+    validateBeforeRun(this);
     if (this.__running) return;
-    const [beginOne, endOne] = this.ones;
     this.__running = true;
-    runAnimation(
-      'backward', 
-      endOne, 
-      beginOne, 
-      this.endEl || endOne.el(),
-      this.beginEl || beginOne.el(),
-      this.__backwardDuration, 
-      this.__zIndex, 
-      this.__timing, 
-      0,
-      0,
-      this.__backwardTransition,
-      () => {
-        this.__running = false;
-        onEnd && onEnd();
-      }
-    );
+    this.ones.forEach(([beginOne, endOne], i) => {
+      const beginEl = this.els[i].begin = this.els[i].begin || beginOne.el();
+      const endEl = this.els[i].end = this.els[i].end || endOne.el();
+      runAnimation(
+        'backward', 
+        endOne,
+        beginOne,
+        endEl,
+        beginEl,
+        this.__backwardDuration, 
+        this.__zIndex, 
+        this.__timing,
+        0,
+        0,
+        this.__backwardTransition,
+        () => {
+          this.__running = false;
+          onEnd && onEnd();
+        }
+      );
+    });
   }
 }

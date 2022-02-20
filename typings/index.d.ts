@@ -8,13 +8,13 @@ export interface IOneOptions {
   // 获取元素的函数，只能用函数
   el: () => HTMLElement,
 
-  // TimelineMotion开始执行时被回调，第一个参数为当前元素，第二个参数为方向，值为forward或backward
+  // TimelineMotion开始执行时被回调，第一个参数为方向，值为forward或backward，第二个参数为当前元素
   // ProgressMotion时，进度从0开始(direction=forward)，或从100开始时回调(direction=backward)
-  before?: (el: HTMLElement, direction: TDirection) => void,
+  before?: (direction: TDirection, el: HTMLElement) => void,
 
-  // TimelineMotion结束执行时被回调，第一个参数为当前元素，第二个参数为方向，值为forward或backward
+  // TimelineMotion结束执行时被回调，第一个参数为方向，值为forward或backward，第二个参数为当前元素
   // ProgressMotion时，进度回到0(direction=backward)，或回到100时回调(direction=forward)
-  after?: (el: HTMLElement, direction: TDirection) => void,
+  after?: (direction: TDirection, el: HTMLElement) => void,
 }
 
 export interface ITransitionDetail {
@@ -58,4 +58,36 @@ export interface IProgressMotionConnectOptions extends IMotionConnectOptions {
   // 运动过渡参数，[0, 20]表示从进度0-20进行淡入淡出过渡
   // 如果未设置此参数，则没有过渡效果，将在进度0和100时立刻显示和隐藏两个元素
   transition?: TProgressMotionTransition,
+}
+
+export class One {
+  public options: IOneOptions;
+  public el: IOneOptions['el'];
+  public before?: IOneOptions['before'] = undefined;
+  public after?: IOneOptions['before'] = undefined;
+  constructor(options: IOneOptions): void;
+}
+
+abstract class BaseMotion {
+  public ones: One[][] = [];
+  public options: IMotionConnectOptions;
+  public id: string;
+  public els: Record<string, Record<'begin'|'end', HTMLElement|undefined>> = {};
+  protected __zIndex = 0;
+  protected __offsetTop = 0;
+  protected __offsetLeft = 0;
+  constructor(options?: IMotionConnectOptions): void;
+}
+export class TimelineMotion extends BaseMotion {
+  static motions: Record<string, TimelineMotion>;
+  static id(id: string): TimelineMotion|undefined;
+  static connect(ones: One[]|One[][], options?: ITimelineMotionConnectOptions): TimelineMotion;
+  public forward(onEnd?: () => void): void;
+  public backward(onEnd?: () => void): void;
+}
+export class ProgressMotion extends BaseMotion {
+  static motions: Record<string, ProgressMotion>;
+  static id(id: string): ProgressMotion|undefined;
+  static connect(ones: One[]|One[][], options?: IProgressMotionConnectOptions): ProgressMotion;
+  public set(v: number): void;
 }

@@ -4,55 +4,78 @@ import {
   TDirection
 } from '../../typings';
 import myAssert from '../myAssert';
-import { createRandomCode, getElementOffsets } from '../utils/helper';
+import {
+  createRandomCode,
+  getElementOffsets,
+  isStaticPosition
+} from '../utils/helper';
 import BaseMotion from './BaseMotion';
 import CssModelMapper from '../utils/CssModelMapper';
 import KeyframesModelMapper from '../utils/KeyframesModelMapper';
 
 
 export const visibilityClsName = `__one_visibility_${createRandomCode()}`;
+let styleNode: HTMLStyleElement;
 export function initMotion<M extends BaseMotion>(
-  beginOne: One,
-  endOne: One,
-  motionIns: M, 
+  ones: One[][],
+  motionIns: M,
   motions: Record<string, M>,
   id?: string
 ) {
   id && (motions[id] = motionIns);
-  [beginOne, endOne].forEach(one => motionIns.add(one));
-  motionIns.beginEl = beginOne.el();
-  const endElement = motionIns.endEl = endOne.el();
-
+  motionIns.ones = ones;
+  
   // 当元素隐藏的style node不存在时添加到head中
-  const visibilityStyleNodeId = `__one_persist_style__`;
-  if (!document.getElementById(visibilityStyleNodeId)) {
-    const styleNode = document.createElement('style');
-    styleNode.id = visibilityStyleNodeId;
+  if (!styleNode) {
+    styleNode = document.createElement('style');
     styleNode.innerHTML = `.${visibilityClsName} {visibility: hidden !important;}`;
     document.head.appendChild(styleNode);
   }
-  if (endElement) {
-    endElement.classList.add(visibilityClsName);
-  }
+
+  ones.forEach(([beginOne, endOne], i) => {
+    let els = motionIns.els[i];
+    if (!els) {
+      els = motionIns.els[i] = {
+        begin: undefined,
+        end: undefined,
+      };
+    }
+    els.begin = beginOne.el();
+    const endElement = els.end = endOne.el();
+    if (endElement) {
+      endElement.classList.add(visibilityClsName);
+    }
+  });
 }
 
 /**
  * 运行动画前验证参数
  * @param param0 动画节点
  */
-export function validateBeforeRun([beginOne, endOne]: any[]) {
-  myAssert(
-    beginOne instanceof One && endOne instanceof One, 
-    'must provide 2 transit element which object is One'
-  );
-  myAssert(
-    !!beginOne.el && !!beginOne.el(), 
-    'begin element is not found!'
-  );
-  myAssert(
-    !!endOne.el && !!endOne.el(), 
-    'end element is not found!'
-  );
+export function validateBeforeRun(ctx: BaseMotion) {
+  const ones: any[] = ctx.ones;
+  ones.forEach(([beginOne, endOne], i) => {
+    myAssert(
+      beginOne instanceof One && endOne instanceof One, 
+      'must provide 2 transit element which object is One'
+    );
+    myAssert(!!beginOne.el, 'begin one must specify el function');
+    const els = ctx.els;
+    const beginElement = els[i].begin || beginOne.el();
+    const beginElementStyle = window.getComputedStyle(beginElement);
+    myAssert(
+      beginElement && beginElementStyle.getPropertyValue('display') !== 'none',
+      'begin element is not found or not visible'
+    );
+    
+    myAssert(!!endOne.el, 'end one must specify el function');
+    const endElement = els[i].end || endOne.el();
+    const endElementStyle = window.getComputedStyle(endElement);
+    myAssert(
+      endElement && endElementStyle.getPropertyValue('display') !== 'none',
+      'end element is not found or not visible'
+    );
+  });
 }
 
 // 构造transform样式
@@ -60,14 +83,17 @@ export const buildStyleTransform = (tx: number, ty: number, sx: number, sy: numb
   `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
 
 // animation-fill-mode: both;是在淡入淡出时，为了执行前保持from内样式，完成后保持to内样式
-const buildAnimClassCss = (clsName: string, animationVal: string, zIndex: number) => 
-  new CssModelMapper('.' + clsName)
+const buildAnimClassCss = (el: HTMLElement, clsName: string, animationVal: string, zIndex: number) => {
+  const cssMapper = new CssModelMapper('.' + clsName)
     .add('animation', animationVal, true)
     .add('animation-fill-mode', 'both')
     .add('transform-origin', 'left top')
-    .add('position', 'relative')
-    .add('z-index', zIndex, false, true)
-    .toString();
+    .add('z-index', zIndex, false, true);
+  if (isStaticPosition(el)) {
+    cssMapper.add('position', 'relative');
+  }
+  return cssMapper.toString();
+};
 
 /**
  * 运行过渡动画
@@ -107,8 +133,8 @@ export function runAnimation(
   const timesScaleBegin2EndY = beginElement.offsetHeight / endElement.offsetHeight;
   
   // 调用运动前的钩子函数
-  beginOne.before && beginOne.before(beginElement, direction);
-  endOne.before && endOne.before(endElement, direction);
+  beginOne.before && beginOne.before(direction, beginElement);
+  endOne.before && endOne.before(direction, endElement);
 
   // 构造动画css内容
   const styleNode = document.createElement('style');
@@ -170,8 +196,8 @@ export function runAnimation(
   }
   const beginAnimCls = '__one_anim_begin_' + randomCode;
   const endAnimCls = '__one_anim_end_' + randomCode;
-  styleNode.innerHTML = `${buildAnimClassCss(beginAnimCls, beginElementAnimVal.join(','), zIndex + 1)}
-  ${buildAnimClassCss(endAnimCls, endElementAnimVal.join(','), zIndex)}
+  styleNode.innerHTML = `${buildAnimClassCss(beginElement, beginAnimCls, beginElementAnimVal.join(','), zIndex + 1)}
+  ${buildAnimClassCss(endElement, endAnimCls, endElementAnimVal.join(','), zIndex)}
   ${animationBeginMapper.toString()}
   ${animationEndMapper.toString()}
   ${animationBeginTransitionMapper.toString()}
@@ -190,9 +216,9 @@ export function runAnimation(
 
     beginElement.classList.remove(beginAnimCls);
     endElement.classList.remove(endAnimCls);
-    beginOne.after && beginOne.after(beginElement, direction);
-    endOne.after && endOne.after(endElement, direction);
-
+    beginOne.after && beginOne.after(direction, beginElement);
+    endOne.after && endOne.after(direction, endElement);
+    
     // 执行完成后移除动画css
     styleNode.parentNode?.removeChild(styleNode);
     onEnd && onEnd();

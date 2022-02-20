@@ -1,12 +1,13 @@
-import { IMotionConnectOptions } from '../../typings';
+import {
+  IMotionConnectOptions
+} from '../../typings';
 import One from '../One';
 
 export default abstract class BaseMotion {
-  public ones: One[] = [];
+  public ones: One[][] = [];
   public options: IMotionConnectOptions;
   public id: string;
-  public beginEl?: HTMLElement;
-  public endEl?: HTMLElement;
+  public els: Record<string, Record<'begin'|'end', HTMLElement|undefined>> = {};
   protected __zIndex = 0;
   protected __offsetTop = 0;
   protected __offsetLeft = 0;
@@ -16,9 +17,5 @@ export default abstract class BaseMotion {
     this.__zIndex = options?.zIndex || this.__zIndex;
     this.__offsetTop = options?.offsetTop || 0;
     this.__offsetLeft = options?.offsetLeft || 0;
-  }
-  
-  add(one: One) {
-    this.ones.length < 2 && this.ones.push(one);
   }
 }

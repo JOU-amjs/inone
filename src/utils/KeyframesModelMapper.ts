@@ -10,12 +10,18 @@ export default class KeyframesModelMapper {
   }
 
   public addFrom(key: string, val: string|number, withPrefix = false, isImportant = false) {
-    const fromRows = this.rows.from = this.rows.from || {};
+    let fromRows = this.rows.from;
+    if (!fromRows) {
+      fromRows = this.rows.from = {};
+    }
     addStyleRow(fromRows, key, val, withPrefix, isImportant);
     return this;
   }
   public addTo(key: string, val: string|number, withPrefix = false, isImportant = false) {
-    const toRows = this.rows.to = this.rows.to || {};
+    let toRows = this.rows.to;
+    if (!toRows) {
+      toRows = this.rows.to = {};
+    }
     addStyleRow(toRows, key, val, withPrefix, isImportant);
     return this;
   }

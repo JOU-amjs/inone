@@ -50,3 +50,13 @@ export function addStyleRow(ctx: TStyleBody, key: string, val: string|number, wi
     });
   }
 }
+
+/**
+ * 判断一个元素position值是否为static
+ * @param el 目标元素
+ * @returns position是否为static值
+ */
+export function isStaticPosition(el: HTMLElement) {
+  const elPosition = window.getComputedStyle(el).getPropertyValue('position');
+  return elPosition === undefined || elPosition === null || elPosition === '' || elPosition === 'static';
+}
