@@ -60,3 +60,9 @@ export function isStaticPosition(el: HTMLElement) {
   const elPosition = window.getComputedStyle(el).getPropertyValue('position');
   return elPosition === undefined || elPosition === null || elPosition === '' || elPosition === 'static';
 }
+
+
+/**
+ * 空函数，做兼容处理
+ */
+export function noop() {}

@@ -1,41 +1,43 @@
 import {
-  IMotionConnectOptions,
-  IProgressMotionConnectOptions,
-  TDirection,
-  TProgressMotionTransition
+  ProgressMotionConnectOptions,
+  Direction,
+  ProgressMotionTransition,
+  OneEvent
 } from '../../typings';
 import myAssert from '../myAssert';
-import { createRandomCode, getElementOffsets, isStaticPosition } from '../utils/helper';
-import One from '../One';
+import { createRandomCode, getElementOffsets, isStaticPosition, noop } from '../utils/helper';
 import BaseMotion from './BaseMotion';
 import {
   buildStyleTransform,
-  initMotion,
-  validateBeforeRun,
+  checkConnectorBeforeRun,
+  checkVisibleStyle,
+  switchConnectorStatus,
   visibilityClsName,
 } from './fn';
 import CssModelMapper from '../utils/CssModelMapper';
 
-export default class ProgressMotion extends BaseMotion {
-  static motions: Record<string, ProgressMotion> = {};
-  static id(id: string) {
-    return ProgressMotion.motions[id];
-  }
-  static connect(ones: One[]|One[][], options?: IMotionConnectOptions) {
-    myAssert(Array.isArray(ones), 'must specify a array which contains `One` objects');
-    const newOnes = (Array.isArray(ones[0]) ? ones : ([ones] as One[][])) as One[][];
-    const motionIns = new ProgressMotion(options);
-    validateBeforeRun(motionIns);    // progress motion只允许两个存在的元素间过渡
-    initMotion(newOnes, motionIns, ProgressMotion.motions, options?.id);
-    return motionIns;
-  }
 
-  private progress = 0;
+const progressMotionManager: Record<string, ProgressMotion> = {};
+export default class ProgressMotion extends BaseMotion {
+  private __progress = 0;
   private __beginProgressCls: string;
   private __endProgressCls: string;
-  private __transition?: TProgressMotionTransition;
+  private __transition?: ProgressMotionTransition;
   private __animationStyleNode: HTMLStyleElement;
-  constructor(options?: IProgressMotionConnectOptions) {
+
+  static create(options?: ProgressMotionConnectOptions) {
+    const inst = new ProgressMotion(options);
+    const name = options?.name;
+    if (name) {
+      progressMotionManager[name] = inst;
+    }
+    return inst;
+  }
+  static forName(name: string) {
+    myAssert(typeof name === 'string', 'name must be a string');
+    return progressMotionManager[name];
+  }
+  constructor(options?: ProgressMotionConnectOptions) {
     super(options);
     if (options?.transition) {
       const [startProgress, stopProgress] = options.transition;
@@ -53,7 +55,8 @@ export default class ProgressMotion extends BaseMotion {
       );
       this.__transition = [options.transition[0] / 100, options.transition[1] / 100];
     }
-
+    
+    checkVisibleStyle();
     const randomCode = createRandomCode();
     this.__beginProgressCls = '__one_progress_begin_' + randomCode;
     this.__endProgressCls = '__one_progress_end_' + randomCode;
@@ -66,45 +69,77 @@ export default class ProgressMotion extends BaseMotion {
    * @param p 进度值
    */
   set(p: number) {
-    validateBeforeRun(this);
     myAssert(typeof p === 'number' && p >= 0 && p <= 100, 'progress value must be a number which between 0 and 100');
+    checkConnectorBeforeRun(this.connectors);
+    this.connectors.forEach(({ beginOne, endOne }, i) => {
+      const beginEl = beginOne.el();
+      const endEl = endOne.el();
+
+      // 开始节点的钩子函数
+      const {
+        onForwardStart: beginOneForwardStartHook = noop,
+        onForwardEnd: beginOneForwardEndHook = noop,
+        onBackwardStart: beginOneBackwardStartHook = noop,
+        onBackwardEnd: beginOneBackwardEndHook = noop,
+      } = beginOne;
     
-    this.ones.forEach(([beginOne, endOne], i) => {
-      const beginElement = this.els[i].begin = this.els[i].begin || beginOne.el();
-      const endElement = this.els[i].end = this.els[i].end || endOne.el();
+      // 结尾节点的钩子函数
+      const {
+        onForwardStart: endOneForwardStartHook = noop,
+        onForwardEnd: endOneForwardEndHook = noop,
+        onBackwardStart: endOneBackwardStartHook = noop,
+        onBackwardEnd: endOneBackwardEndHook = noop,
+      } = endOne;
+
+      // motion连接时的钩子函数
+      const createOneEvent = (direction: Direction, currentEl: HTMLElement) => ({
+        direction,
+        beginEl,
+        endEl,
+        currentEl,
+      } as OneEvent);
 
       // 当progress为0时，隐藏结束节点，并调用对应回调函数
       // 当progress为100时，隐藏开始节点，并调用对应回调函数
       // 当progress为0-100时，设置样式到当前位置，必要时调用对应回调函数
       // p<=0和p>=100时，需要通过判断控制调用次数，避免重复回调
-      if (p <= 0 && this.progress > 0) {
-        beginElement.classList.remove(visibilityClsName, this.__beginProgressCls);
-        endElement.classList.remove(this.__endProgressCls);
-        endElement.classList.add(visibilityClsName);
+      if (p <= 0 && this.__progress > 0) {
+        beginEl.classList.remove(visibilityClsName, this.__beginProgressCls);
+        endEl.classList.remove(this.__endProgressCls);
+        endEl.classList.add(visibilityClsName);
 
         // 进度回到0时调用after(direction=backward)
-        beginOne.after && beginOne.after('backward', beginElement);
-        endOne.after && endOne.after('backward', endElement);
-        // 【注意】this.progress表示上一次的进度值，会在set函数最末尾更新进度值
-      } else if (p >= 100 && this.progress < 100) {
-        if (this.progress < 100) {
-          endElement.classList.remove(visibilityClsName, this.__endProgressCls);
-          beginElement.classList.remove(this.__beginProgressCls);
-          beginElement.classList.add(visibilityClsName);
+        beginOneBackwardEndHook(createOneEvent('backward', beginEl));
+        endOneBackwardEndHook(createOneEvent('backward', endEl));
 
-          // 或回到100时回调after(direction=forward)
-          beginOne.after && beginOne.after('forward', beginElement);
-          endOne.after && endOne.after('forward', endElement);
+        // backward时节点回到开始状态
+        switchConnectorStatus(beginOne, endOne, 'begin');
+        // 【注意】this.__progress表示上一次的进度值，会在set函数最末尾更新进度值
+      } else if (p >= 100 && this.__progress < 100) {
+        if (this.__progress < 100) {
+          endEl.classList.remove(visibilityClsName, this.__endProgressCls);
+          beginEl.classList.remove(this.__beginProgressCls);
+          beginEl.classList.add(visibilityClsName);
+
+          // 回到100时回调after(direction=forward)
+          beginOneForwardEndHook(createOneEvent('forward', beginEl));
+          endOneForwardEndHook(createOneEvent('forward', endEl));
+          
+          // forward时节点回到结束状态
+          switchConnectorStatus(beginOne, endOne, 'end');
         }
       } else if (p > 0 && p < 100) {
-        const beginOffset = getElementOffsets(beginElement);
-        const endOffset = getElementOffsets(endElement);
+        // 中间状态时节点为执行状态
+        switchConnectorStatus(beginOne, endOne, 'running');
+
+        const beginOffset = getElementOffsets(beginEl);
+        const endOffset = getElementOffsets(endEl);
         const diffOffsetTop = endOffset.top - beginOffset.top;
         const diffOffsetLeft = endOffset.left - beginOffset.left;
-        const diffTimesScaleEnd2BeginX = endElement.offsetWidth / beginElement.offsetWidth - 1;
-        const diffTimesScaleEnd2BeginY = endElement.offsetHeight / beginElement.offsetHeight - 1;
-        const diffTimesScaleBegin2EndX = beginElement.offsetWidth / endElement.offsetWidth - 1;
-        const diffTimesScaleBegin2EndY = beginElement.offsetHeight / endElement.offsetHeight - 1;
+        const diffTimesScaleEnd2BeginX = endEl.offsetWidth / beginEl.offsetWidth - 1;
+        const diffTimesScaleEnd2BeginY = endEl.offsetHeight / beginEl.offsetHeight - 1;
+        const diffTimesScaleBegin2EndX = beginEl.offsetWidth / endEl.offsetWidth - 1;
+        const diffTimesScaleBegin2EndY = beginEl.offsetHeight / endEl.offsetHeight - 1;
         const percentProgress = p / 100;    // 0-1的进度
         const reverseProgress = 1 - percentProgress;  // 0-1的反进度
 
@@ -113,7 +148,7 @@ export default class ProgressMotion extends BaseMotion {
         const transition = this.__transition;
         if (transition) {
           // 如果设置了运动渐变，那需要先去除隐藏类名
-          const classList = beginElement.classList.contains(visibilityClsName) ? beginElement.classList : endElement.classList;
+          const classList = beginEl.classList.contains(visibilityClsName) ? beginEl.classList : endEl.classList;
           classList.remove(visibilityClsName);
 
           // 分情况计算透明度
@@ -128,19 +163,24 @@ export default class ProgressMotion extends BaseMotion {
         }
 
         // 进度从0开始(direction=forward)，或从100开始时(direction=backward)回调before
-        if (this.progress <= 0 || this.progress >= 100) {
-          const direction: TDirection = this.progress <= 0 ? 'forward' : 'backward';
-          beginOne.before && beginOne.before(direction, beginElement);
-          endOne.before && endOne.before(direction, endElement);
+        if (this.__progress <= 0 || this.__progress >= 100) {
+          const direction: Direction = this.__progress <= 0 ? 'forward' : 'backward';
+          if (direction === 'forward') {
+            beginOneForwardStartHook(createOneEvent(direction, beginEl));
+            endOneForwardStartHook(createOneEvent(direction, endEl));
+          } else {
+            beginOneBackwardStartHook(createOneEvent(direction, beginEl));
+            endOneBackwardStartHook(createOneEvent(direction, endEl));
+          }
 
           // 正向移动(direction=forward)
-          if (this.progress <= 0) {
-            beginElement.classList.remove(visibilityClsName);
-            endElement.classList.add(visibilityClsName);
-          } else if (this.progress >= 100) {
-            if (this.progress <= 0) {
-              beginElement.classList.add(visibilityClsName);
-              endElement.classList.remove(visibilityClsName);
+          if (this.__progress <= 0) {
+            beginEl.classList.remove(visibilityClsName);
+            endEl.classList.add(visibilityClsName);
+          } else if (this.__progress >= 100) {
+            if (this.__progress <= 0) {
+              beginEl.classList.add(visibilityClsName);
+              endEl.classList.remove(visibilityClsName);
             }
           }
         }
@@ -168,7 +208,7 @@ export default class ProgressMotion extends BaseMotion {
         };
 
         this.__animationStyleNode.innerHTML = `${buildProgressClassCss(
-          beginElement,
+          beginEl,
           this.__beginProgressCls,
           (diffOffsetLeft + this.__offsetLeft) * percentProgress,
           (diffOffsetTop + this.__offsetTop) * percentProgress,
@@ -178,7 +218,7 @@ export default class ProgressMotion extends BaseMotion {
           beginOpacity
         )}
         ${buildProgressClassCss(
-          endElement,
+          endEl,
           this.__endProgressCls,
           -diffOffsetLeft * reverseProgress,
           -diffOffsetTop * reverseProgress,
@@ -188,10 +228,10 @@ export default class ProgressMotion extends BaseMotion {
           beginOpacity !== undefined ? (1 - beginOpacity) : undefined
         )}`;
         
-        beginElement.classList.add(this.__beginProgressCls);
-        endElement.classList.add(this.__endProgressCls);
+        beginEl.classList.add(this.__beginProgressCls);
+        endEl.classList.add(this.__endProgressCls);
       }
-      this.progress = p;
+      this.__progress = p;
     });
   }
 
@@ -200,6 +240,6 @@ export default class ProgressMotion extends BaseMotion {
    * @returns 当前进度值(0-100)
    */
   get() {
-    return this.progress;
+    return this.__progress;
   }
 }

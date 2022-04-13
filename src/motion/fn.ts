@@ -1,82 +1,95 @@
-import One from '../One';
+import { One } from '../One';
 import {
-  ITransitionDetail,
-  TDirection
+  TransitionDetail,
+  Direction,
+  Connector,
+  OneStatus,
+  OneEvent,
 } from '../../typings';
 import myAssert from '../myAssert';
 import {
   createRandomCode,
   getElementOffsets,
-  isStaticPosition
+  isStaticPosition,
+  noop
 } from '../utils/helper';
-import BaseMotion from './BaseMotion';
 import CssModelMapper from '../utils/CssModelMapper';
 import KeyframesModelMapper from '../utils/KeyframesModelMapper';
 
 
 export const visibilityClsName = `__one_visibility_${createRandomCode()}`;
 let styleNode: HTMLStyleElement;
-export function initMotion<M extends BaseMotion>(
-  ones: One[][],
-  motionIns: M,
-  motions: Record<string, M>,
-  id?: string
-) {
-  id && (motions[id] = motionIns);
-  motionIns.ones = ones;
-  
+export function checkVisibleStyle() {
   // 当元素隐藏的style node不存在时添加到head中
   if (!styleNode) {
     styleNode = document.createElement('style');
     styleNode.innerHTML = `.${visibilityClsName} {visibility: hidden !important;}`;
     document.head.appendChild(styleNode);
   }
-
-  ones.forEach(([beginOne, endOne], i) => {
-    let els = motionIns.els[i];
-    if (!els) {
-      els = motionIns.els[i] = {
-        begin: undefined,
-        end: undefined,
-      };
-    }
-    els.begin = beginOne.el();
-    const endElement = els.end = endOne.el();
-    if (endElement) {
-      endElement.classList.add(visibilityClsName);
-    }
-  });
 }
 
 /**
- * 运行动画前验证参数
- * @param param0 动画节点
+ * 运行动画前验证ones参数
+ * @param connectors 连接ones数组
  */
-export function validateBeforeRun(ctx: BaseMotion) {
-  const ones: any[] = ctx.ones;
-  ones.forEach(([beginOne, endOne], i) => {
+export function checkConnectorBeforeRun(connectors: Connector[]) {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+  connectors.forEach(({ beginOne, endOne }) => {
     myAssert(
       beginOne instanceof One && endOne instanceof One, 
       'must provide 2 transit element which object is One'
     );
     myAssert(!!beginOne.el, 'begin one must specify el function');
-    const els = ctx.els;
-    const beginElement = els[i].begin || beginOne.el();
-    const beginElementStyle = window.getComputedStyle(beginElement);
+    const beginEl = beginOne.el();
+    const beginElStyle = window.getComputedStyle(beginEl);
     myAssert(
-      beginElement && beginElementStyle.getPropertyValue('display') !== 'none',
+      beginEl && beginElStyle.getPropertyValue('display') !== 'none',
       'begin element is not found or not visible'
     );
     
     myAssert(!!endOne.el, 'end one must specify el function');
-    const endElement = els[i].end || endOne.el();
-    const endElementStyle = window.getComputedStyle(endElement);
+    const endEl = endOne.el();
+    const endElStyle = window.getComputedStyle(endEl);
     myAssert(
-      endElement && endElementStyle.getPropertyValue('display') !== 'none',
+      endEl && endElStyle.getPropertyValue('display') !== 'none',
       'end element is not found or not visible'
     );
   });
 }
+
+/**
+ * 检查连接one的状态
+ * @param connectors 连接one的数组
+ */
+export function checkConnectorStatus(connectors: Connector[], direction: Direction) {
+  const assertMsg = (
+    name = 'unknown',
+    expectStatus: OneStatus,
+    currentStatus: OneStatus
+  ) => `the state of One's object named \`${name}\` requires ${expectStatus} but got ${currentStatus}`;
+  connectors.forEach(({ beginOne, endOne }) => {
+    // 如果要检查forward，则对象的begin状态是正确的，反之是对象的end状态是正确的
+    let expectStatus: OneStatus = direction === 'forward' ? 'begin' : 'end';
+    const beginStatus = beginOne.status;
+    const endStatus = endOne.status;
+    myAssert(beginStatus === expectStatus, assertMsg(beginOne.options.name, expectStatus, beginStatus));
+    myAssert(endStatus === expectStatus, assertMsg(endOne.options.name, expectStatus, endStatus));
+  });
+}
+
+/**
+ * 切换One对象的状态
+ * @param beginOne 开始的one对象
+ * @param endOne 结尾的one对象
+ * @param status 状态
+ */
+export function switchConnectorStatus(beginOne: One, endOne: One, status: OneStatus) {
+  beginOne.status = status;
+  endOne.status = status;
+}
+
 
 // 构造transform样式
 export const buildStyleTransform = (tx: number, ty: number, sx: number, sy: number) => 
@@ -105,36 +118,67 @@ const buildAnimClassCss = (el: HTMLElement, clsName: string, animationVal: strin
  * @param timing  运动曲线函数
  * @param offsetTop top偏移值
  * @param offsetLeft left偏移值
- * @param gradientDetail 运动渐变参数
+ * @param transitionDetail 运动渐变参数
  * @param onEnd 运动结束的回调函数
  */
 export function runAnimation(
-  direction: TDirection,
-  beginOne: One, 
-  endOne: One, 
-  beginElement: HTMLElement,
-  endElement: HTMLElement,
+  direction: Direction,
+  beginOne: One,
+  endOne: One,
+  beginEl: HTMLElement,
+  endEl: HTMLElement,
   duration: number,
   zIndex: number,
   timing?: string,
   offsetTop = 0,
   offsetLeft = 0,
-  gradientDetail?:
-  ITransitionDetail,
-  onEnd?: () => void
+  transitionDetail?: TransitionDetail,
+  animationEnd = noop
 ) {
-  const beginOffset = getElementOffsets(beginElement);
-  const endOffset = getElementOffsets(endElement);
+  // 开始节点的钩子函数
+  const {
+    onForwardStart: beginOneForwardStartHook = noop,
+    onForwardEnd: beginOneForwardEndHook = noop,
+    onBackwardStart: beginOneBackwardStartHook = noop,
+    onBackwardEnd: beginOneBackwardEndHook = noop,
+  } = beginOne;
+
+  // 结尾节点的钩子函数
+  const {
+    onForwardStart: endOneForwardStartHook = noop,
+    onForwardEnd: endOneForwardEndHook = noop,
+    onBackwardStart: endOneBackwardStartHook = noop,
+    onBackwardEnd: endOneBackwardEndHook = noop,
+  } = endOne;
+
+  // motion连接时的钩子函数
+  const createOneEvent = (direction: Direction, currentEl: HTMLElement) => ({
+    direction,
+    beginEl,
+    endEl,
+    currentEl,
+  } as OneEvent);
+
+  // 调用运动前的钩子函数
+  if (direction === 'forward') {
+    beginOneForwardStartHook(createOneEvent(direction, beginEl));
+    endOneForwardStartHook(createOneEvent(direction, endEl));
+  } else {
+    beginOneBackwardStartHook(createOneEvent(direction, beginEl));
+    endOneBackwardStartHook(createOneEvent(direction, endEl));
+  }
+
+  const beginOffset = getElementOffsets(beginEl);
+  const endOffset = getElementOffsets(endEl);
   const diffOffsetTop = endOffset.top - beginOffset.top;
   const diffOffsetLeft = endOffset.left - beginOffset.left;
-  const timesScaleEnd2BeginX = endElement.offsetWidth / beginElement.offsetWidth;
-  const timesScaleEnd2BeginY = endElement.offsetHeight / beginElement.offsetHeight;
-  const timesScaleBegin2EndX = beginElement.offsetWidth / endElement.offsetWidth;
-  const timesScaleBegin2EndY = beginElement.offsetHeight / endElement.offsetHeight;
-  
-  // 调用运动前的钩子函数
-  beginOne.before && beginOne.before(direction, beginElement);
-  endOne.before && endOne.before(direction, endElement);
+  const timesScaleEnd2BeginX = endEl.offsetWidth / beginEl.offsetWidth;
+  const timesScaleEnd2BeginY = endEl.offsetHeight / beginEl.offsetHeight;
+  const timesScaleBegin2EndX = beginEl.offsetWidth / endEl.offsetWidth;
+  const timesScaleBegin2EndY = beginEl.offsetHeight / endEl.offsetHeight;
+
+  // 修改对象状态为running
+  switchConnectorStatus(beginOne, endOne, 'running');
 
   // 构造动画css内容
   const styleNode = document.createElement('style');
@@ -177,10 +221,10 @@ export function runAnimation(
     timing
   )];
   // 如果有渐变动画，则需要先移除endElement的visibility class才能起作用
-  if (gradientDetail) {
-    endElement.classList.remove(visibilityClsName);
-    const gradientDuration = gradientDetail.duration;
-    const gradientDelay = gradientDetail.delay;
+  if (transitionDetail) {
+    endEl.classList.remove(visibilityClsName);
+    const gradientDuration = transitionDetail.duration;
+    const gradientDelay = transitionDetail.delay;
     beginElementAnimVal.push(KeyframesModelMapper.buildAnimationValue(
       animationBeginTransitionName,
       gradientDuration,
@@ -196,8 +240,8 @@ export function runAnimation(
   }
   const beginAnimCls = '__one_anim_begin_' + randomCode;
   const endAnimCls = '__one_anim_end_' + randomCode;
-  styleNode.innerHTML = `${buildAnimClassCss(beginElement, beginAnimCls, beginElementAnimVal.join(','), zIndex + 1)}
-  ${buildAnimClassCss(endElement, endAnimCls, endElementAnimVal.join(','), zIndex)}
+  styleNode.innerHTML = `${buildAnimClassCss(beginEl, beginAnimCls, beginElementAnimVal.join(','), zIndex + 1)}
+  ${buildAnimClassCss(endEl, endAnimCls, endElementAnimVal.join(','), zIndex)}
   ${animationBeginMapper.toString()}
   ${animationEndMapper.toString()}
   ${animationBeginTransitionMapper.toString()}
@@ -206,21 +250,31 @@ export function runAnimation(
 
   // 开始执行运动
   // 赋予动画给开始和结束元素
-  beginElement.classList.add(beginAnimCls);
-  endElement.classList.add(endAnimCls);
+  beginEl.classList.add(beginAnimCls);
+  endEl.classList.add(endAnimCls);
 
   // 处理动画完成后的事项
   setTimeout(() => {
-    beginElement.classList.add(visibilityClsName);
-    endElement.classList.remove(visibilityClsName);
+    beginEl.classList.add(visibilityClsName);
+    endEl.classList.remove(visibilityClsName);
 
-    beginElement.classList.remove(beginAnimCls);
-    endElement.classList.remove(endAnimCls);
-    beginOne.after && beginOne.after(direction, beginElement);
-    endOne.after && endOne.after(direction, endElement);
+    beginEl.classList.remove(beginAnimCls);
+    endEl.classList.remove(endAnimCls);
+
+    // 修改对象状态为begin或end状态
+    switchConnectorStatus(beginOne, endOne, direction === 'forward' ? 'end' : 'begin');
+
+    // 调用结束的钩子函数
+    if (direction === 'forward') {
+      beginOneForwardEndHook(createOneEvent(direction, beginEl));
+      endOneForwardEndHook(createOneEvent(direction, endEl));
+    } else {
+      beginOneBackwardEndHook(createOneEvent(direction, beginEl));
+      endOneBackwardEndHook(createOneEvent(direction, endEl));
+    }
     
     // 执行完成后移除动画css
-    styleNode.parentNode?.removeChild(styleNode);
-    onEnd && onEnd();
+    // styleNode.parentNode?.removeChild(styleNode);
+    animationEnd();
   }, duration);
 }
