@@ -324,7 +324,7 @@ export function runAnimation(
     }
     
     // 执行完成后移除动画css
-    // styleNode.parentNode?.removeChild(styleNode);
+    styleNode.parentNode?.removeChild(styleNode);
     animationEnd();
   }, duration);
 }
