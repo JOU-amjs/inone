@@ -15,28 +15,15 @@ import {
   visibilityClsName,
 } from './fn';
 import CssModelMapper from '../utils/CssModelMapper';
+import { motionManager } from './forName';
 
 
-const progressMotionManager: Record<string, ProgressMotion> = {};
-export default class ProgressMotion extends BaseMotion {
+class ProgressMotion extends BaseMotion {
   private __progress = 0;
   private __beginProgressCls: string;
   private __endProgressCls: string;
   private __transition?: ProgressMotionTransition;
   private __animationStyleNode: HTMLStyleElement;
-
-  static create(options?: ProgressMotionConnectOptions) {
-    const inst = new ProgressMotion(options);
-    const name = options?.name;
-    if (name) {
-      progressMotionManager[name] = inst;
-    }
-    return inst;
-  }
-  static forName(name: string) {
-    myAssert(typeof name === 'string', 'name must be a string');
-    return progressMotionManager[name];
-  }
   constructor(options?: ProgressMotionConnectOptions) {
     super(options);
     if (options?.transition) {
@@ -242,4 +229,19 @@ export default class ProgressMotion extends BaseMotion {
   get() {
     return this.__progress;
   }
+}
+
+
+/**
+ * 创建ProgressMotion对象
+ * @param options ProgressMotion连接参数
+ * @returns ProgressMotion对象
+ */
+ export default function createProgressMotion(options?: ProgressMotionConnectOptions) {
+  const inst = new ProgressMotion(options);
+  const name = options?.name;
+  if (name) {
+    motionManager[name] = inst;
+  }
+  return inst;
 }

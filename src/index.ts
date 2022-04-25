@@ -1,3 +1,7 @@
 export { default as createOne } from './One';
-export { default as TimelineMotion } from './motion/TimelineMotion';
-export { default as ProgressMotion } from './motion/ProgressMotion';
+export {
+  createTimelineMotion,
+  useLastTimelineMotion
+} from './motion/TimelineMotion';
+export { default as createProgressMotion } from './motion/ProgressMotion';
+export { default as forName } from './motion/forName';

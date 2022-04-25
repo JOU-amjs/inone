@@ -5,11 +5,11 @@ export interface DetailParam<T> {
 
 export type Direction = 'forward'|'backward';
 export interface OneEvent {
-  direction: Direction,
-  beginEl: HTMLElement,
-  endEl: HTMLElement,
-  currentEl: HTMLElement,
-};
+  readonly direction: Direction,
+  readonly beginEl: HTMLElement,
+  readonly endEl: HTMLElement,
+  readonly currentEl: HTMLElement,
+}
 export interface OneOptions {
   // One对象的name，可以在motion对象中调用connect时指定name获取对应的One对象
   name?: string,
@@ -76,12 +76,12 @@ type OneStatus = 'begin'|'end'|'running';
 export class One {
   public options: OneOptions;
   public el: OneOptions['el'];
-  public onForwardStart?: OneOptions['onForwardStart'] = undefined;
-  public onForwardEnd?: OneOptions['onForwardEnd'] = undefined;
-  public onBackwardStart?: OneOptions['onBackwardStart'] = undefined;
-  public onBackwardEnd?: OneOptions['onBackwardEnd'] = undefined;
+  public onForwardStart?: OneOptions['onForwardStart'];
+  public onForwardEnd?: OneOptions['onForwardEnd'];
+  public onBackwardStart?: OneOptions['onBackwardStart'];
+  public onBackwardEnd?: OneOptions['onBackwardEnd'];
   public status: OneStatus;
-  constructor(options: OneOptions): void;
+  constructor(options: OneOptions);
 }
 
 // 该函数用于创建One对象
@@ -89,8 +89,8 @@ export function createOne(options?: OneOptions): One;
 
 // 结束回调函数的事件对象
 export interface ConnectEvent {
-  [name: string]: HTMLElement,
-  direction: Direction,
+  [x: string]: HTMLElement,
+  direction: any,
 }
 // 调用forward、backward和backwardWithLastOnes的结束回调函数
 export type onEndHandler = (event: ConnectEvent) => void;
@@ -98,17 +98,17 @@ export interface Connector {
   beginOne: One,
   endOne: One,
 }
-abstract class BaseMotion {
-  public connectors: Connector[] = [];
+declare abstract class BaseMotion {
+  public connectors: Connector[];
   public options: MotionConnectOptions;
-  protected __zIndex = 0;
-  protected __offsetTop = 0;
-  protected __offsetLeft = 0;
+  protected __zIndex: number;
+  protected __offsetTop: number;
+  protected __offsetLeft: number;
 
   // 缓存上次执行动画时的ones对象
-  protected __lastConnectors: Connector[] = [];
-  constructor(options?: MotionConnectOptions): void;
-  public connect(beginOne: string|One, endOne: string|One, connectConfig?: ConnectConfig);
+  protected __lastConnectors: Connector[];
+  constructor(options?: MotionConnectOptions);
+  public connect(beginOne: string|One, endOne: string|One);
 }
 export class TimelineMotion extends BaseMotion {
   public forward(onEnd?: () => void): void;
@@ -120,3 +120,8 @@ export class TimelineMotion extends BaseMotion {
 export class ProgressMotion extends BaseMotion {
   public set(v: number): void;
 }
+
+export function createTimelineMotion(options?: TimelineMotionConnectOptions): TimelineMotion;
+export function createProgressMotion(options?: ProgressMotionConnectOptions): ProgressMotion;
+export function forName<T extends BaseMotion>(name: string): T;
+export function useLastTimelineMotion(): TimelineMotion|undefined;

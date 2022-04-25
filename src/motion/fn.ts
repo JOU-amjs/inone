@@ -11,7 +11,8 @@ import {
   createRandomCode,
   getElementOffsets,
   isStaticPosition,
-  noop
+  noop,
+  parseStyleValue
 } from '../utils/helper';
 import CssModelMapper from '../utils/CssModelMapper';
 import KeyframesModelMapper from '../utils/KeyframesModelMapper';
@@ -172,10 +173,38 @@ export function runAnimation(
   const endOffset = getElementOffsets(endEl);
   const diffOffsetTop = endOffset.top - beginOffset.top;
   const diffOffsetLeft = endOffset.left - beginOffset.left;
-  const timesScaleEnd2BeginX = endEl.offsetWidth / beginEl.offsetWidth;
-  const timesScaleEnd2BeginY = endEl.offsetHeight / beginEl.offsetHeight;
-  const timesScaleBegin2EndX = beginEl.offsetWidth / endEl.offsetWidth;
-  const timesScaleBegin2EndY = beginEl.offsetHeight / endEl.offsetHeight;
+  const timesScaleXBegin2End = endEl.offsetWidth / beginEl.offsetWidth;
+  const timesScaleYBegin2End = endEl.offsetHeight / beginEl.offsetHeight;
+  const timesScaleXEnd2Begin = beginEl.offsetWidth / endEl.offsetWidth;
+  const timesScaleYEnd2Begin = beginEl.offsetHeight / endEl.offsetHeight;
+  const beginElStyles = window.getComputedStyle(beginEl);
+  const endElStyles = window.getComputedStyle(endEl);
+  // 起始和结束元素的圆角值
+  const beginElTopLeftRadius = parseStyleValue(beginElStyles.borderTopLeftRadius);
+  const beginElTopRightRadius = parseStyleValue(beginElStyles.borderTopRightRadius);
+  const beginElBottomRightRadius = parseStyleValue(beginElStyles.borderBottomRightRadius);
+  const beginElBottomLeftRadius = parseStyleValue(beginElStyles.borderBottomLeftRadius);
+  const endElTopLeftRadius = parseStyleValue(endElStyles.borderTopLeftRadius);
+  const endElTopRightRadius = parseStyleValue(endElStyles.borderTopRightRadius);
+  const endElBottomRightRadius = parseStyleValue(endElStyles.borderBottomRightRadius);
+  const endElBottomLeftRadius = parseStyleValue(endElStyles.borderBottomLeftRadius);
+
+  // 判断是否需要使用radius，并除以缩放倍数返回前项
+  // 如果单位不同则不使用radius值
+  type ParseStyleValueReturnType = typeof parseStyleValue extends (...args: any[]) => infer R ? R : any;
+  const useRadiusIfDifferent = (
+    prev: ParseStyleValueReturnType,
+    next: ParseStyleValueReturnType,
+    prevScale = 1,
+    nextScale = 1
+  ) => {
+    if (prev.unit !== next.unit) {
+      return;
+    }
+    const prevValue = prev.value;
+    const divisor = Math.min(prevScale, nextScale);
+    return prevValue === 0 && next.value === 0 ? undefined : `${prevValue / divisor}${prev.unit}`;
+  };
 
   // 修改对象状态为running
   switchConnectorStatus(beginOne, endOne, 'running');
@@ -192,17 +221,38 @@ export function runAnimation(
     .addTo('transform', buildStyleTransform(
       diffOffsetLeft + offsetLeft,
       diffOffsetTop + offsetTop, 
-      timesScaleEnd2BeginX, 
-      timesScaleEnd2BeginY
-    ));
+      timesScaleXBegin2End, 
+      timesScaleYBegin2End
+    ))
+    .addFrom('border-top-left-radius', useRadiusIfDifferent(beginElTopLeftRadius, endElTopLeftRadius))
+    .addFrom('border-top-right-radius', useRadiusIfDifferent(beginElTopRightRadius, endElTopRightRadius))
+    .addFrom('border-bottom-right-radius', useRadiusIfDifferent(beginElBottomRightRadius, endElBottomRightRadius))
+    .addFrom('border-bottom-left-radius', useRadiusIfDifferent(beginElBottomLeftRadius, endElBottomLeftRadius))
+    .addTo('border-top-left-radius', useRadiusIfDifferent(endElTopLeftRadius, beginElTopLeftRadius, timesScaleXBegin2End, timesScaleYBegin2End))
+    .addTo('border-top-right-radius', useRadiusIfDifferent(endElTopRightRadius, beginElTopRightRadius, timesScaleXBegin2End, timesScaleYBegin2End))
+    .addTo('border-bottom-right-radius', useRadiusIfDifferent(endElBottomRightRadius, beginElBottomRightRadius, timesScaleXBegin2End, timesScaleYBegin2End))
+    .addTo('border-bottom-left-radius', useRadiusIfDifferent(endElBottomLeftRadius, beginElBottomLeftRadius, timesScaleXBegin2End, timesScaleYBegin2End));
+
   const animationEndMapper = new KeyframesModelMapper(animationEndName)
     .addFrom('transform', buildStyleTransform(
       -diffOffsetLeft, 
       -diffOffsetTop, 
-      timesScaleBegin2EndX, 
-      timesScaleBegin2EndY
+      timesScaleXEnd2Begin, 
+      timesScaleYEnd2Begin
     ))
-    .addTo('transform', buildStyleTransform(offsetLeft, offsetTop, 1, 1));
+    .addTo('transform', buildStyleTransform(offsetLeft, offsetTop, 1, 1))
+    .addFrom('border-top-left-radius', useRadiusIfDifferent(beginElTopLeftRadius, endElTopLeftRadius, timesScaleXEnd2Begin, timesScaleYEnd2Begin))
+    .addFrom('border-top-right-radius', useRadiusIfDifferent(beginElTopRightRadius, endElTopRightRadius, timesScaleXEnd2Begin, timesScaleYEnd2Begin))
+    .addFrom('border-bottom-right-radius', useRadiusIfDifferent(beginElBottomRightRadius, endElBottomRightRadius, timesScaleXEnd2Begin, timesScaleYEnd2Begin))
+    .addFrom('border-bottom-left-radius', useRadiusIfDifferent(beginElBottomLeftRadius, endElBottomLeftRadius, timesScaleXEnd2Begin, timesScaleYEnd2Begin))
+    .addTo('border-top-left-radius', useRadiusIfDifferent(endElTopLeftRadius, beginElTopLeftRadius))
+    .addTo('border-top-right-radius', useRadiusIfDifferent(endElTopRightRadius, beginElTopRightRadius))
+    .addTo('border-bottom-right-radius', useRadiusIfDifferent(endElBottomRightRadius, beginElBottomRightRadius))
+    .addTo('border-bottom-left-radius', useRadiusIfDifferent(endElBottomLeftRadius, beginElBottomLeftRadius));
+  
+  // 过渡动画是通过transition参数控制过渡时机的
+  // 而位置和尺寸过渡动画是全程过渡的
+  // 因此需要分开创建
   const animationBeginTransitionMapper = new KeyframesModelMapper(animationBeginTransitionName)
     .addFrom('opacity', 1)
     .addTo('opacity', 0);

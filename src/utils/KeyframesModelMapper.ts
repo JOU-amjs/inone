@@ -9,7 +9,11 @@ export default class KeyframesModelMapper {
     this.name = name;
   }
 
-  public addFrom(key: string, val: string|number, withPrefix = false, isImportant = false) {
+  // 添加keyframes的from部分
+  public addFrom(key: string, val?: string|number, withPrefix = false, isImportant = false) {
+    if (val === undefined || val == null) {
+      return this;
+    }
     let fromRows = this.rows.from;
     if (!fromRows) {
       fromRows = this.rows.from = {};
@@ -17,7 +21,11 @@ export default class KeyframesModelMapper {
     addStyleRow(fromRows, key, val, withPrefix, isImportant);
     return this;
   }
-  public addTo(key: string, val: string|number, withPrefix = false, isImportant = false) {
+  // 添加keyframes的to部分
+  public addTo(key: string, val?: string|number, withPrefix = false, isImportant = false) {
+    if (val === undefined || val == null) {
+      return this;
+    }
     let toRows = this.rows.to;
     if (!toRows) {
       toRows = this.rows.to = {};
@@ -25,7 +33,11 @@ export default class KeyframesModelMapper {
     addStyleRow(toRows, key, val, withPrefix, isImportant);
     return this;
   }
-  public addPercent(percent: number, key: string, val: string|number, withPrefix = false, isImportant = false) {
+  // 添加keyframes的百分比部分
+  public addPercent(percent: number, key: string, val?: string|number, withPrefix = false, isImportant = false) {
+    if (val === undefined || val == null) {
+      return this;
+    }
     const percentStr = percent + '%';
     const percentRows = this.rows[percentStr] = this.rows[percentStr] || {};
     addStyleRow(percentRows, key, val, withPrefix, isImportant);

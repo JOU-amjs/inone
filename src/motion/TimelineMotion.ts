@@ -5,7 +5,6 @@ import {
   onEndHandler,
   ConnectEvent,
 } from '../../typings';
-import myAssert from '../myAssert';
 import { noop } from '../utils/helper';
 import BaseMotion from './BaseMotion';
 import {
@@ -14,31 +13,16 @@ import {
   checkConnectorBeforeRun,
   checkConnectorStatus,
 } from './fn';
+import { motionManager } from './forName';
 
 
-const timelineMotionManager: Record<string, TimelineMotion> = {};
 let lastUsedMotion: TimelineMotion|undefined = undefined;   // 用来保存上次使用的对象
-export default class TimelineMotion extends BaseMotion {
+class TimelineMotion extends BaseMotion {
   public __forwardDuration = 500;
   public __backwardDuration = 500;
   public __timing?: string;
   public __forwardTransition?: TransitionDetail;
   public __backwardTransition?: TransitionDetail;
-
-  static create(options?: TimelineMotionConnectOptions) {
-    const inst = new TimelineMotion(options);
-    const name = options?.name;
-    if (name) {
-      timelineMotionManager[name] = inst;
-    }
-    return inst;
-  }
-  static forName(name: string) {
-    myAssert(typeof name === 'string', 'name must be a string');
-    return timelineMotionManager[name];
-  }
-  static getLastUsed = () => lastUsedMotion;
-
   constructor(options?: TimelineMotionConnectOptions) {
     super(options);
     if (typeof options?.duration === 'number') {
@@ -164,3 +148,25 @@ export default class TimelineMotion extends BaseMotion {
     });
   }
 }
+
+/**
+ * 创建TimelineMotion对象
+ * @param options TimelineMotion连接参数
+ * @returns TimelineMotion对象
+ */
+export function createTimelineMotion(options?: TimelineMotionConnectOptions) {
+  const inst = new TimelineMotion(options);
+  const name = options?.name;
+  if (name) {
+    motionManager[name] = inst;
+  }
+  return inst;
+}
+
+/**
+ * 使用上一次执行过渡动画的TimelineMotion对象
+ * @returns 上一次执行动画的TimelineMotion对象，如没有则返回undefined
+ */
+export function useLastTimelineMotion() {
+  return lastUsedMotion;
+};
