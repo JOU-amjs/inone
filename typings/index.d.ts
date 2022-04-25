@@ -113,9 +113,6 @@ declare abstract class BaseMotion {
 export class TimelineMotion extends BaseMotion {
   public forward(onEnd?: () => void): void;
   public backward(onEnd?: () => void): void;
-
-  // 使用上次前进时的One连接对象来运行后退动画
-  public backwardWithLastOnes(onEnd?: () => void): void;
 }
 export class ProgressMotion extends BaseMotion {
   public set(v: number): void;
