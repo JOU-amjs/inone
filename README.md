@@ -24,7 +24,7 @@ yarn add inone
 ### **使用教程**
 **1. 以时间线为基准的元素移动类`TimelineMotion`，可以创建在某个时间长度内让多个元素移动的过渡动画。**
 ```javascript
-import { createOne, TimelineMotion } from 'inone';
+import { createOne, createTimelineMotion, forName } from 'inone';
 
 // 创建起始元素包装类
 const beginOne = createOne({
@@ -38,7 +38,7 @@ const endOne = createOne({
 });
 
 // 创建一个TimelineMotion
-let timeline = TimelineMotion.create();
+let timeline = createTimelineMotion();
 
 // 通过调用connect方法连接两个元素，如果结尾元素在DOM树上，那么连接后会将它与起始元素合二为一
 timeline.connect(beginOne, endOne);
@@ -52,8 +52,9 @@ timeline.forward();
 timeline.backward();
 ```
 这样就创建了一个最简单的过渡运动，但我们提供了许多自定义参数给你设定，以下为常用的参数。
+> 过渡元素不可为inline元素，否则会出现动画错乱
 ```javascript
-const timeline = TimelineMotion.create({
+const timeline = createTimelineMotion({
   // 为创建的对象取名，然后可通过TimelineMotion.forName(name)快速获取此对象
   name: 'demoTl',
 
@@ -89,13 +90,13 @@ timeline.connect('begin', 'end').backward(connectEvent => {
 });
 
 // 也可以通过对象名称获取timeline对象
-TimelineMotion.forName('demoTl').forward();
+forName('demoTl').forward();
 ```
 
 **2. 以进度值为基准的元素移动类`ProgressMotion`，可以让用户自定义控制元素运动进度，如随着窗口滚动，元素运动逐渐从0%到100%。**
 > 以下为简单示例
 ```javascript
-import { createOne, ProgressMotion } from 'inone';
+import { createOne, createProgressMotion, forName } from 'inone';
 
 // 创建起始元素包装类
 const beginOne = createOne({
@@ -122,7 +123,7 @@ const endOne = createOne({
 
 // 用ProgressMotion连接两个包装对象，并返回ProgressMotion对象
 // 使用ProgressMotion连接的两个元素必须在DOM树上
-const progress = ProgressMotion.create().connect(beginOne, endOne);
+const progress = createProgressMotion().connect(beginOne, endOne);
 
 window.addEventListener(() => {
   const pgs = Math.min(document.documentElement.scrollTop / 2, 100);
@@ -133,7 +134,7 @@ window.addEventListener(() => {
 ```
 对于ProgressMotion也提供了许多自定义参数。
 ```javascript
-const timeline = ProgressMotion.create({
+const timeline = createProgressMotion({
   // (可选)与TimelineMotion相同
   name: 'customProgressId',
 
@@ -151,7 +152,7 @@ const timeline = ProgressMotion.create({
 
 // 通过name获取对应的ProgressMotion对象
 // 这在不同位置创建对象和调用对象实例时会很有作用
-const progress = ProgressMotion.forName('customProgressId');
+const progress = forName('customProgressId');
 progress.set(20);
 ```
 
@@ -178,7 +179,7 @@ progress.set(20);
   - 描述: 该函数在回退动画结束执行时被回调，可接收一个事件对象，它包含过渡元素对，以及当前元素。
   - 类型: (oneEvent: OneEvent) => void
 
-### **[静态方法]TimelineMotion.create**
+### **createTimelineMotion**
 - 描述: 创建一个时间线运动对象，该对象可以连接一或多组过渡元素，并让它们执行过渡动画。
 - 参数: {Object} (可选)TimelineMotion对象的options，详情如下：
 - **name(可选)**
@@ -207,28 +208,23 @@ progress.set(20);
   - 类型: number
 - 返回值: TimelineMotion对象
 
-### **[静态方法]TimelineMotion.forName**
-- 描述: 通过name查找对应的TimelineMotion对象
-- 参数: 
-  - {string} name
-- 返回值: TimelineMotion对象，未找到时返回undefined
-
-### **[对象方法]timeline.connect**
+### **TimelineMotion对象**
+### **[对象方法]connect**
 - 描述: 以时间线运动的方式连接两个元素过渡对象，连接后对应的元素将合并在一起，也可以多次调用此方法链接多组过渡元素，此时可以调用forward或backward函数执行一或多组元素的过渡运动。
 - 参数:
   - {One|string} beginOne 起始过渡元素，即通过createOne创建的对象。
   - {One|string} endOne 结尾过渡元素。
 - 返回值: 当前对象
-### **[对象方法]timeline.forward**
+### **[对象方法]forward**
 - 描述: 执行元素前进过渡，即从第一个元素过渡到第二个元素
 - 参数: 
   - {Function} 元素过渡运动完成后的钩子函数，可接收一个ConnectEvent事件对象，包含正在执行动画的指定了名称的html元素对象
-### **[对象方法]timeline.backward**
+### **[对象方法]backward**
 - 描述: 执行元素回退过渡，即从第二个元素过渡到第一个元素
 - 参数: 
   - {Function} 元素过渡运动完成后的钩子函数，可接收一个ConnectEvent事件对象，包含正在执行动画的指定了名称的html元素对象
 
-### **[静态方法]ProgressMotion.create**
+### **createProgressMotion**
 - 描述: 创建一个进度值的方式运动的描述对象，该对象可以连接一或多组过渡元素，并让它们同时执行过渡动画。
 - 参数:
   - {Object} (可选)ProgressMotion对象的options参数,具体如下：
@@ -250,20 +246,26 @@ progress.set(20);
   - 类型: number
 - 返回值: ProgressMotion对象
 
-### **[静态方法]ProgressMotion.forName**
-- 描述: 通过name查找对应的ProgressMotion对象
-- 参数: 
-  - {string} name
-- 返回值: ProgressMotion对象，未找到时返回undefined
-
-### **[对象方法]progress.connect**
+### **ProgressMotion对象**
+### **[对象方法]connect**
 - 描述: 以进度值的方式连接两个元素过渡对象，ProgressMotion对象可以自定义设置元素过渡的进度，元素将过渡到指定进度的位置，它一般会与频繁触发的事件如`scroll`事件、`mousemove`事件等一同使用。连接后对应的元素将合并在一起。
 - 参数:
   - {One|string} beginOne 起始过渡元素，即通过createOne创建的对象。
   - {One|string} endOne 结尾过渡元素。
 - 返回值: 当前对象
 
-### **[对象方法]progress.set**
+### **[对象方法]set**
 - 描述: 设置元素过渡的进度值，它一般会与频繁触发的事件如`scroll`事件、`mousemove`事件等一同使用。
 - 参数: 
   - {number} 进度值，0-100的数字，可传小数点。如果小于0、大于100或其他类型值都将报错
+
+### **forName**
+- 描述: 通过name查找对应的TimelineMotion或ProgressMotion对象
+- 参数: 
+  - {string} name
+- 返回值: TimelineMotion或ProgressMotion对象，未找到时返回undefined
+
+### **useLastTimelineMotion**
+- 描述: 获取上一次执行动画的TimelineMotion对象
+- 参数: 无
+- 返回值: 上一次执行动画的TimelineMotion对象，如果没有则返回undefined

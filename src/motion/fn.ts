@@ -42,20 +42,34 @@ export function checkConnectorBeforeRun(connectors: Connector[]) {
       beginOne instanceof One && endOne instanceof One, 
       'must provide 2 transit element which object is One'
     );
+
+    // 判断元素的相关属性
     myAssert(!!beginOne.el, 'begin one must specify el function');
     const beginEl = beginOne.el();
+    myAssert(!!beginEl, 'begin element is not found');
     const beginElStyle = window.getComputedStyle(beginEl);
+    const beginElDisplay = beginElStyle.display;
     myAssert(
-      beginEl && beginElStyle.getPropertyValue('display') !== 'none',
-      'begin element is not found or not visible'
+      beginElDisplay !== 'none',
+      'begin element is not visible'
+    );
+    myAssert(
+      beginElDisplay !== 'inline',
+      'begin element cannot be `inline`'
     );
     
     myAssert(!!endOne.el, 'end one must specify el function');
-    const endEl = endOne.el();
+    const endEl = beginOne.el();
+    myAssert(!!endEl, 'end element is not found');
     const endElStyle = window.getComputedStyle(endEl);
+    const endElDisplay = endElStyle.display;
     myAssert(
-      endEl && endElStyle.getPropertyValue('display') !== 'none',
-      'end element is not found or not visible'
+      endElDisplay !== 'none',
+      'end element is not visible'
+    );
+    myAssert(
+      endElDisplay !== 'inline',
+      'end element cannot be `inline`'
     );
   });
 }
