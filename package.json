@@ -1,6 +1,6 @@
 {
   "name": "inone",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "A web elements transition library",
   "main": "dist/inone.umd.min.js",
   "jsnext:main": "dist/inone.esm.js",
